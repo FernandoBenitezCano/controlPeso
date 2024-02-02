@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registro de Peso por Fecha</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/momentjs/2.29.1/moment.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"
+    integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
+    integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL"
+    crossorigin="anonymous"></script>
+  <base href="/">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+</head>
+
+<body>
+  <app-root></app-root>
+  <div class="container mt-5">
+    <h1 class="text-center mb-4">Registro de Peso por Fecha</h1>
+    <div class="row">
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="fecha">Fecha:</label>
+          <input type="date" id="fecha" class="form-control">
+        </div>
+        <div class="mb-3">
+          <label for="peso">Peso (kg):</label>
+          <input type="number" step="0.1" id="peso" class="form-control">
+        </div>
+        <div class="mb-3">
+          <label for="altura">Altura (Cm):</label>
+          <input type="number" step="0.1" id="altura" class="form-control">
+        </div>
+        <div class="mb-3">
+          <label for="Perimetro">Perímetro Abdominal (Cm):</label>
+          <input type="number" step="0.1" id="perimetro" class="form-control">
+        </div>
+        <div class="mb-3 d-flex justify-content-between">
+          <button id="agregarRegistroBtn" class="btn btn-primary">Agregar Registro</button>
+          <button id="limpiarLocalStorageBtn" class="btn btn-danger">Limpiar Datos</button>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <canvas id="chart"></canvas>
+      </div>
+      <p id="imcText" class="mt-3 text-center py-3 fw-bold">
+        Para un IMC de <span id="imcValue" class="text-primary"></span>,
+        la clasificación es: <span id="clasificacion"></span>
+      </p>
+
+      <p id="alertText" class="alert mt-3 text-center py-3 fw-bold">
+      </p>
+      <div class="col-md-12 mt-4">
+        <h2 class="text-center mb-3">Historial de Registros</h2>
+        <table class="table">
+          <thead>
+            <tr>
+              <th scope="col">Fecha</th>
+              <th scope="col">Peso (kg)</th>
+              <th scope="col">Perímetro Abdominal (Cm)</th>
+              <th scope="col">IMC</th>
+            </tr>
+          </thead>
+          <tbody id="historialBody">
+            <!-- El contenido del historial se mostrará aquí -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      let ctx = document.getElementById('chart').getContext('2d');
+      let storedData = JSON.parse(localStorage.getItem('weightData')) || { labels: [], weights: [], imc: [], perimetros: [] };
+      let myChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: storedData.labels,
+          datasets: [
+            {
+              label: 'Peso (kg)',
+              data: storedData.weights,
+              borderColor: 'rgba(75, 192, 192, 1)',
+              borderWidth: 2,
+              fill: false
+            },
+            {
+              label: 'IMC',
+              data: storedData.imc,
+              borderColor: 'rgba(255, 99, 132, 1)',
+              borderWidth: 2,
+              fill: false
+            },
+            {
+              label: 'Perímetro Abdominal (Cm)',
+              data: storedData.perimetros,
+              borderColor: 'rgba(255, 205, 86, 1)',
+              borderWidth: 2,
+              fill: false
+            }
+          ]
+        },
+        options: {
+          scales: {
+            y: [{
+              max: Math.max(...storedData.weights) + 5,
+            }],
+            x: [{
+              type: 'linear',
+              position: 'bottom',
+              reverse: true, // Esta línea invierte el eje x
+              ticks: {
+                callback: function (value, index, values) {
+                  return moment(value).format('DD/MM/YYYY');
+                }
+              }
+            }]
+          }
+        }
+      });
+
+      function ordenarDatosPorFecha() {
+        let data = myChart.data;
+        let zippedData = [];
+
+        for (let i = 0; i < data.labels.length; i++) {
+          let zip = {
+            fecha: data.labels[i],
+            peso: data.datasets[0].data[i],
+            imc: data.datasets[1].data[i],
+            perimetro: data.datasets[2].data[i],
+          };
+          zippedData.push(zip);
+        }
+
+        zippedData.sort((a, b) => {
+          return new Date(a.fecha) - new Date(b.fecha);
+        });
+
+        data.labels = zippedData.map((item) => item.fecha);
+        data.datasets[0].data = zippedData.map((item) => item.peso);
+        data.datasets[1].data = zippedData.map((item) => item.imc);
+        data.datasets[2].data = zippedData.map((item) => item.perimetro);
+
+        myChart.update();
+      }
+
+      function agregarRegistro() {
+        let fechaInput = document.getElementById('fecha');
+        let pesoInput = document.getElementById('peso');
+        let alturaInput = document.getElementById('altura');
+        let perimetroInput = document.getElementById('perimetro');
+
+        let fecha = fechaInput.value;
+        let peso = pesoInput.value;
+        let alturaMetros = alturaInput.value / 100;
+        let perimetro = perimetroInput.value;
+
+        // Validamos que los campos no estén vacíos
+        if (fecha.trim() === '' || peso.trim() === '' || alturaInput.value.trim() === '' || perimetro.trim() === '') {
+          showAlert('Por favor, complete todos los campos.', 'alert-danger');
+          return;
+        }
+
+        // Validamos que la fecha no sea superior a la actual
+        let currentDate = new Date();
+        let selectedDate = new Date(fecha);
+        if (selectedDate > currentDate) {
+          showAlert('La fecha no puede ser superior a la actual.', 'alert-danger');
+          return;
+        }
+
+        let imc = peso / (alturaMetros * alturaMetros);
+
+        myChart.data.labels.push(fecha);
+        myChart.data.datasets[0].data.push(peso);
+        myChart.data.datasets[1].data.push(imc.toFixed(2));
+        myChart.data.datasets[2].data.push(perimetro);
+        myChart.update();
+
+        // Update stored data in localStorage
+        storedData.labels = myChart.data.labels;
+        storedData.weights = myChart.data.datasets[0].data;
+        storedData.imc = myChart.data.datasets[1].data;
+        storedData.perimetros = myChart.data.datasets[2].data;
+        localStorage.setItem('weightData', JSON.stringify(storedData));
+
+        // Mostrar en el historial
+        mostrarEnHistorial(fecha, peso, perimetro, imc.toFixed(2));
+
+        fechaInput.value = '';
+        pesoInput.value = '';
+        alturaInput.value = '';
+        perimetroInput.value = '';
+
+        clasificarPesoYMostrarMensaje(imc);
+        
+        // Después de agregar un nuevo registro, ordenar por fecha
+        ordenarDatosPorFecha();
+      }
+
+      function mostrarEnHistorial(fecha, peso, perimetro, imc) {
+        let historialBody = document.getElementById('historialBody');
+
+        let row = historialBody.insertRow(-1); // Cambiado de 0 a -1
+        let cellFecha = row.insertCell(0);
+        let cellPeso = row.insertCell(1);
+        let cellPerimetro = row.insertCell(2);
+        let cellIMC = row.insertCell(3);
+
+        cellFecha.innerHTML = fecha;
+        cellPeso.innerHTML = peso;
+        cellPerimetro.innerHTML = perimetro;
+        cellIMC.innerHTML = imc;
+
+        // Guardar en el historial en localStorage
+        let historialData = JSON.parse(localStorage.getItem('historialData')) || [];
+        historialData.push({ fecha, peso, perimetro, imc });
+        localStorage.setItem('historialData', JSON.stringify(historialData));
+      }
+
+      function cargarHistorialDesdeLocalStorage() {
+        let historialData = JSON.parse(localStorage.getItem('historialData')) || [];
+        let historialBody = document.getElementById('historialBody');
+
+        // Limpiar la tabla antes de insertar nuevos registros
+        historialBody.innerHTML = '';
+
+        for (let i = 0; i < historialData.length; i++) {
+          let row = historialBody.insertRow(-1); // Cambiado de 0 a -1
+          let cellFecha = row.insertCell(0);
+          let cellPeso = row.insertCell(1);
+          let cellPerimetro = row.insertCell(2);
+          let cellIMC = row.insertCell(3);
+
+          cellFecha.innerHTML = historialData[i].fecha;
+          cellPeso.innerHTML = historialData[i].peso;
+          cellPerimetro.innerHTML = historialData[i].perimetro;
+          cellIMC.innerHTML = historialData[i].imc;
+        }
+      }
+      cargarHistorialDesdeLocalStorage();
+
+      function fechaExisteEnTabla(fecha) {
+        let historialBody = document.getElementById('historialBody');
+        let rows = historialBody.getElementsByTagName('tr');
+
+        for (let i = 0; i < rows.length; i++) {
+          let cellFecha = rows[i].getElementsByTagName('td')[0];
+          if (cellFecha && cellFecha.innerHTML === fecha) {
+            return true; // La fecha ya existe en la tabla
+          }
+        }
+
+        return false; // La fecha no existe en la tabla
+      }
+
+      function showAlert(message, alertClass) {
+        let alertElement = document.getElementById('alertText');
+
+        alertElement.innerText = message;
+        alertElement.classList.remove('alert-danger', 'alert-success', 'alert-warning');
+        alertElement.classList.add(alertClass);
+        alertElement.classList.remove('d-none');
+
+        setTimeout(function () {
+          alertElement.classList.add('d-none');
+        }, 3000);
+      }
+
+      function clasificarPesoYMostrarMensaje(imc) {
+        let imcElement = document.getElementById("imcValue");
+        let clasificacionElement = document.getElementById("clasificacion");
+        let result = clasificarPeso(imc);
+
+        imcElement.innerText = imc.toFixed(2);
+        clasificacionElement.innerText = result.peso;
+        clasificacionElement.className = ""; // Elimina todas las clases
+        clasificacionElement.classList.add(result.colorClass);
+      }
+
+      function clasificarPeso(imc) {
+        let result = {};
+        if (imc < 18.5) {
+          result.peso = 'Bajo peso';
+          result.colorClass = "text-danger";
+        } else if (imc >= 18.5 && imc < 24.9) {
+          result.peso = 'Peso normal';
+          result.colorClass = "text-success";
+        } else if (imc >= 25 && imc < 29.9) {
+          result.peso = 'Sobrepeso';
+          result.colorClass = "text-warning";
+        } else if (imc >= 30 && imc < 34.9) {
+          result.peso = 'Obesidad (Grado 1)';
+          result.colorClass = "text-warning";
+        } else if (imc >= 35 && imc < 39.9) {
+          result.peso = 'Obesidad (Grado 2)';
+          result.colorClass = "text-warning";
+        } else {
+          result.peso = 'Obesidad (Grado 3)';
+          result.colorClass = "text-danger";
+        }
+
+        return result;
+      }
+
+      document.getElementById('agregarRegistroBtn').addEventListener('click', agregarRegistro);
+
+      document.getElementById('limpiarLocalStorageBtn').addEventListener('click', function () {
+        // Limpia el localStorage
+        localStorage.removeItem('weightData');
+        localStorage.removeItem('historialData');
+
+        // Recarga la página
+        location.reload();
+      });
+    });
+  </script>
+</body>
+
+</html>
